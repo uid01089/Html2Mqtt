@@ -75,20 +75,34 @@ def create_app(*args, **kwargs):
     @flaskApp.route('/api/store', methods=['POST', 'OPTIONS'])
     def store():
 
+        def sendObj(objToSend: object) -> bool:
+            success = True
+            try:
+                topic = objToSend['topic']
+                value = objToSend['value']
+
+                current_app.html2Mqtt.mirrorToMqtt(topic, value)
+            except KeyError:
+                success = False
+
+            return success
+
         if request.method == 'OPTIONS':
             # Respond to preflight request
             response = jsonify({'message': 'Preflight request successful'})
             return response
 
-        try:
-            topic = request.json['topic']
-            value = request.json['value']
+        success = True
+        receivedObjects = request.json
+        if isinstance(receivedObjects, list):
+            for receivedObject in receivedObjects:
+                success = success and sendObj(receivedObject)
+        else:
+            success = success and sendObj(receivedObjects)
 
-            current_app.html2Mqtt.mirrorToMqtt(topic, value)
-
-            response = jsonify({'message': 'POST request successful', 'data': request.json})
-            return response
-        except KeyError:
+        if success:
+            return jsonify({'message': 'POST request successful', 'data': request.json})
+        else:
             return jsonify(error='Invalid request. Both key and value are required.'), 400
 
     # Start the scheduler
@@ -101,4 +115,4 @@ def create_app(*args, **kwargs):
 app = create_app()
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=8000, debug=False)
+    app.run(host="0.0.0.0", port=8000, debug=False, threaded=True)
